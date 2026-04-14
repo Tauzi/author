@@ -160,14 +160,12 @@ export default function EditorBubbleMenu({ editor }) {
             {/* AI 助手 */}
             <button
                 className="bubble-btn bubble-btn-ai"
-                title="AI 助手 (Ctrl+J)"
+                title="AI 助手 (Ctrl+A)"
                 onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    // 派发 Ctrl+J 键盘事件唤出 InlineAI
-                    document.dispatchEvent(new KeyboardEvent('keydown', {
-                        key: 'j', code: 'KeyJ', ctrlKey: true, bubbles: true
-                    }));
+                    // 直接派发打开事件，避免复用 Ctrl+A 时误触发全选逻辑
+                    document.dispatchEvent(new CustomEvent('inline-ai:open'));
                     setVisible(false);
                 }}
             >

@@ -1,13 +1,14 @@
-# Author (本地版)
+# Author (本地自用版)
 
-> 基于 [YuanShiJiLoong/author](https://github.com/YuanShiJiLoong/author) 修改的纯本地版本。
->
+> 原项目[YuanShiJiLoong/author](https://github.com/YuanShiJiLoong/author) 
+
+>本项目基于[mleafish/author](https://github.com/mleafish/author)再次修改
+
 > 原项目 README 见 [README.original.md](README.original.md)
 
 一款面向小说作者的 AI 辅助创作工具，集成富文本编辑器、AI 写作助手和世界观设定管理。本版本移除了所有云端/登录功能，数据完全保存在本地。
 
 
-意外发现了这个ai写作工具，用下来挺好用，但还有些不喜欢的地方，我不会编程，所以这个项目全部由claude修改，我只想加入我需要的功能，然后分享出来，随缘更新！
 
 ---
 
@@ -17,7 +18,13 @@
 - **API 配置页面优化** — 重新调整布局，修复若干 bug
 - **修复设定集同步异常** — 解决设定集引用/参考异常的 bug
 - **快照功能增强** — 支持自定义是否自动保存，新增一键删除快照
-- 更多功能见发布页
+
+## 新增自用修改
+
+- **编辑区** — 移除分页，长文本可连贯滚动到底部
+- **AI 助手** —「续写」改为「完成正文」（根据细纲内容补全正文）；快捷键由 `Ctrl+J` 调整为 `Ctrl+A`，弹窗窗口居中显示
+- **参考功能** — 默认勾选当前章节前 10 章作为上下文
+- **修复** — AI 侧边栏对话的相关 bug
 
 ---
 
@@ -59,5 +66,4 @@ npm run build && npx electron-builder --win
 
 [AGPL-3.0](LICENSE)
 
-## 友链
-[Linuxdo](https://linux.do/)
+

@@ -15,12 +15,11 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import { Markdown } from 'tiptap-markdown';
 import { MathInline, MathBlock, openMathEditor } from './MathExtension';
-import { PageBreakExtension } from './PageBreakExtension';
 import { SearchHighlightExtension } from './SearchHighlightExtension';
 import GhostMark from './GhostMark';
 import EditorBubbleMenu from './EditorBubbleMenu';
 import { createSlashExtension, SlashCommandMenu } from './SlashCommands';
-import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useCallback, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { ChevronUp, ChevronDown, Undo2, Redo2, Wand2 } from 'lucide-react';
 import { ragRecommend } from '../lib/context-engine';
 import { useAppStore } from '../store/useAppStore';
@@ -29,23 +28,20 @@ import { PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 
 // ==================== AI 模式配置 ====================
 const AI_MODES = [
-    { key: 'continue', label: '✦ 续写', desc: '从光标处自然续写', needsSelection: false },
+    { key: 'continue', label: '✦ 完成正文', desc: '根据已有内容（细纲之类的）完成正文', needsSelection: false },
     { key: 'rewrite', label: '✎ 润色', desc: '提升选中文字质量', needsSelection: true },
     { key: 'expand', label: '⊕ 扩写', desc: '丰富细节与描写', needsSelection: true },
     { key: 'condense', label: '⊖ 精简', desc: '浓缩核心内容', needsSelection: true },
     { key: 'chat', label: '💬 问答', desc: '向 AI 提问，不改变原文', needsSelection: false },
 ];
 
-// ==================== 虚拟分页常量 ====================
-const PAGE_HEIGHT = 1056; // A4 纸 @ 96dpi
-const PAGE_GAP = 24;      // 页间灰色间隙
+// ==================== 连续长文布局常量 ====================
+const CHAPTER_MIN_HEIGHT = 560;
 
 
 const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editable = true, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }, ref) {
-    const clipPathId = useId();
     const debounceRef = useRef(null);
     const isLoadingContentRef = useRef(false);
-    const contentRef = useRef(null);
     const { writingBackground } = useAppStore();
 
     const editorContainerBackgroundStyle = useMemo(() => ({
@@ -63,9 +59,6 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
         backgroundRepeat: 'no-repeat',
         backgroundSize: writingBackground?.page?.size || 'cover',
     }), [writingBackground]);
-
-    // 页数状态
-    const [pageCount, setPageCount] = useState(1);
 
     // 斜杠命令菜单状态
     const [slashRange, setSlashRange] = useState(null);
@@ -140,7 +133,6 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
             }),
             MathInline,
             MathBlock,
-            PageBreakExtension,
             GhostMark,
             slashExtension,
             SearchHighlightExtension,
@@ -250,28 +242,6 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
         },
     }), [editor]);
 
-    // ===== 核心：ResizeObserver 监听内容高度，计算页数 =====
-    const observerRef = useRef(null);
-    const contentCallbackRef = useCallback((node) => {
-        // 清理旧 observer
-        if (observerRef.current) {
-            observerRef.current.disconnect();
-            observerRef.current = null;
-        }
-        if (!node) return;
-        contentRef.current = node;
-        const observer = new ResizeObserver(() => {
-            if (!contentRef.current) return;
-            // scrollHeight 更准确地反映内容实际高度
-            const height = contentRef.current.scrollHeight;
-            // 把 PAGE_GAP 补进来算精确数学除法
-            const needed = Math.max(1, Math.ceil((height + PAGE_GAP) / (PAGE_HEIGHT + PAGE_GAP)));
-            setPageCount(prev => prev !== needed ? needed : prev);
-        });
-        observer.observe(node);
-        observerRef.current = observer;
-    }, []);
-
     // Ctrl+F 快捷键
     useEffect(() => {
         const handler = (e) => {
@@ -289,8 +259,6 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
     );
 
     // 容器总高度 = 页数 × 单页高 + 间隙总高
-    const totalWorkspaceHeight = pageCount * PAGE_HEIGHT + (pageCount - 1) * PAGE_GAP;
-
     return (
         <>
             <EditorToolbar editor={editor} margins={margins} setMargins={setMargins} />
@@ -308,37 +276,15 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
                     }
                 }}
             >
-                <div className="document-workspace" style={{ minHeight: totalWorkspaceHeight }}>
+                <div className="document-workspace">
+                    <div className="chapter-editor-shell">
 
                     {/* SVG clip definition — 每页一个矩形，文字只在页面内可见 */}
-                    <svg width="0" height="0" style={{ position: 'absolute' }}>
-                        <defs>
-                            <clipPath id={clipPathId} clipPathUnits="userSpaceOnUse">
-                                {Array.from({ length: pageCount }).map((_, i) => {
-                                    const pageTop = i * (PAGE_HEIGHT + PAGE_GAP);
-                                    return <rect key={i} x="0" y={pageTop} width="10000" height={PAGE_HEIGHT} />;
-                                })}
-                            </clipPath>
-                        </defs>
-                    </svg>
 
                     {/* ===== 底层：白色纸张卡片阵列 ===== */}
-                    <div className="pages-bg-layer">
-                        {Array.from({ length: pageCount }).map((_, i) => (
-                            <div
-                                key={i}
-                                className="page-card"
-                                style={{
-                                    ...pageCardBackgroundStyle,
-                                    height: PAGE_HEIGHT,
-                                    marginBottom: i === pageCount - 1 ? 0 : PAGE_GAP,
-                                }}
-                            />
-                        ))}
-                    </div>
 
                     {/* ===== 页间标签（在灰色间隙中显示页码）===== */}
-                    {pageCount > 1 && Array.from({ length: pageCount - 1 }).map((_, i) => {
+                    {/* legacy pagination removed
                         const gapTop = (i + 1) * PAGE_HEIGHT + i * PAGE_GAP;
                         return (
                             <div
@@ -361,36 +307,34 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
                                 </span>
                             </div>
                         );
-                    })}
+                    */}
 
                     {/* ===== 文字层（clipPath 严格裁切到页面区域）===== */}
                     <div
-                        className="pages-fg-layer"
+                        className="chapter-editor-surface"
                         style={{
-                            minHeight: totalWorkspaceHeight,
-                            clipPath: `url(#${clipPathId})`,
-                            WebkitClipPath: `url(#${clipPathId})`,
+                            ...pageCardBackgroundStyle,
+                            minHeight: CHAPTER_MIN_HEIGHT,
                             '--page-margin-x': `${margins.x}px`,
                             '--page-margin-y': `${margins.y}px`,
                         }}
                     >
-                        <div ref={contentCallbackRef}>
-                            <EditorContent editor={editor} />
-                            <EditorBubbleMenu editor={editor} />
-                            {slashRange && (
-                                <SlashCommandMenu
-                                    editor={editor}
-                                    range={slashRange}
-                                    onClose={() => setSlashRange(null)}
-                                />
-                            )}
-                        </div>
+                        <EditorContent editor={editor} />
+                        <EditorBubbleMenu editor={editor} />
+                        {slashRange && (
+                            <SlashCommandMenu
+                                editor={editor}
+                                range={slashRange}
+                                onClose={() => setSlashRange(null)}
+                            />
+                        )}
+                    </div>
                     </div>
                 </div>
             </div>
             <FindBar editor={editor} visible={findBarVisible} onClose={() => setFindBarVisible(false)} />
-            <InlineAI editor={editor} onAiRequest={onAiRequest} onArchiveGeneration={onArchiveGeneration} contextItems={contextItems} contextSelection={contextSelection} setContextSelection={setContextSelection} />
-            <StatusBar editor={editor} pageCount={pageCount} />
+            <InlineAI chapterId={chapterId} editor={editor} onAiRequest={onAiRequest} onArchiveGeneration={onArchiveGeneration} contextItems={contextItems} contextSelection={contextSelection} setContextSelection={setContextSelection} />
+            <StatusBar editor={editor} />
         </>
     );
 });
@@ -669,7 +613,7 @@ function FindBar({ editor, visible, onClose }) {
 }
 
 // ==================== Inline AI 组件 ====================
-function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }) {
+function InlineAI({ chapterId, editor, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }) {
     const { setShowSettings, setJumpToNodeId } = useAppStore();
     const [visible, setVisible] = useState(false);
     const [mode, setMode] = useState('continue');
@@ -685,6 +629,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
     // Ghost text tracking
     const ghostStartRef = useRef(null);
     const ghostTextRef = useRef('');
+    const lastGhostWasNewlineRef = useRef(false);
     // Rewrite backup
     const originalTextRef = useRef(null);
     const originalRangeRef = useRef(null);
@@ -697,6 +642,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
     const [chatAnswer, setChatAnswer] = useState('');
     const chatPanelRef = useRef(null);
     const chatInputRef = useRef(null);
+    const defaultChapterSelectionRef = useRef(null);
 
     // ===== 拖动支持 =====
     const dragRef = useRef({ dragging: false, startX: 0, startY: 0, origTop: 0, origLeft: 0 });
@@ -738,47 +684,75 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         return editor.state.doc.textBetween(from, to, ' ');
     }, [editor]);
 
-    // 获取上文（用于续写）
+    // 获取光标前文（用于补完正文）
     const getContextText = useCallback(() => {
         if (!editor) return '';
-        const text = editor.getText();
-        return text.length > 1500 ? text.slice(-1500) : text;
+        const { from } = editor.state.selection;
+        const textBeforeCursor = editor.state.doc.textBetween(0, from, '\n', '\n');
+        return textBeforeCursor.length > 2000 ? textBeforeCursor.slice(-2000) : textBeforeCursor;
     }, [editor]);
 
-    // 计算浮窗位置（基于光标，使用视口坐标 position:fixed）
+    // 计算浮窗位置（默认居中显示在视口中央）
     const updatePosition = useCallback(() => {
-        if (!editor) return;
-        const { view } = editor;
-        const head = editor.state.selection.head;
-        const coords = view.coordsAtPos(head, -1);
-
         const GAP = 16;
-        const popoverW = 360;
-        const popoverH = 130;
+        const fallbackWidth = mode === 'chat' ? 440 : 360;
+        const fallbackHeight = mode === 'chat' ? 520 : 280;
         const vw = window.innerWidth;
         const vh = window.innerHeight;
+        const popoverW = popoverRef.current?.offsetWidth || fallbackWidth;
+        const popoverH = popoverRef.current?.offsetHeight || fallbackHeight;
+        const maxLeft = Math.max(GAP, vw - popoverW - GAP);
+        const maxTop = Math.max(GAP, vh - popoverH - GAP);
 
-        let top = coords.bottom + 8;
-        let left = coords.left;
-        left = Math.max(GAP, Math.min(left, vw - popoverW - GAP));
-        if (top + popoverH > vh - GAP) {
-            top = coords.top - popoverH - 8;
-        }
-        if (top < GAP) top = GAP;
+        const top = Math.min(Math.max((vh - popoverH) / 2, GAP), maxTop);
+        const left = Math.min(Math.max((vw - popoverW) / 2, GAP), maxLeft);
 
         setPosition({ top, left });
-    }, [editor]);
+    }, [mode]);
 
     // 打开浮窗
     const open = useCallback(() => {
         if (pendingGhost) return; // 有待确认的 ghost 时不打开新的
-        const selected = getSelectedText();
-        setMode(selected ? 'rewrite' : 'continue');
+        setMode('continue');
         setInstruction('');
         updatePosition();
         setDragOffset(null); // 重置拖动偏移
         setVisible(true);
-    }, [getSelectedText, updatePosition, pendingGhost]);
+    }, [updatePosition, pendingGhost]);
+
+    const isEditorShortcutContext = useCallback((target) => {
+        if (!editor?.view?.dom) return false;
+        if (target instanceof Node && editor.view.dom.contains(target)) return true;
+        if (editor.isFocused) return true;
+        const selection = window.getSelection();
+        return !!selection?.anchorNode && editor.view.dom.contains(selection.anchorNode);
+    }, [editor]);
+
+    const selectAllAndOpen = useCallback(() => {
+        if (!editor) return;
+        editor.chain().focus().selectAll().run();
+        open();
+    }, [editor, open]);
+
+    const applyDefaultChapterReferences = useCallback(() => {
+        if (!setContextSelection || !contextItems?.length || !chapterId) return;
+
+        const chapterItems = contextItems.filter(it => it.category === 'chapter' || it.category === 'currentChapter');
+        const currentIndex = chapterItems.findIndex(it => it.id === 'chapter-current');
+        if (currentIndex === -1) return;
+
+        const defaultChapterIds = chapterItems
+            .slice(Math.max(0, currentIndex - 10), currentIndex)
+            .map(it => it.id);
+        const chapterItemIds = new Set(chapterItems.map(it => it.id));
+
+        setContextSelection(prev => {
+            const next = new Set([...prev].filter(id => !chapterItemIds.has(id)));
+            defaultChapterIds.forEach(id => next.add(id));
+            return next;
+        });
+        defaultChapterSelectionRef.current = chapterId;
+    }, [chapterId, contextItems, setContextSelection]);
 
     // 关闭浮窗
     const close = useCallback(() => {
@@ -797,56 +771,66 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         typeQueueRef.current = [];
         typingRef.current = false;
         setStreaming(false);
+        lastGhostWasNewlineRef.current = false;
         // 如果已经有 ghost 文本，进入待确认状态
         if (ghostTextRef.current) {
             setPendingGhost(true);
         }
     }, []);
 
-    // 打字机效果：逐字符插入编辑器，带 ghost mark
-    // 使用原生 ProseMirror transaction，彻底避免 scrollIntoView
-    const suppressScrollRef = useRef(false);
+    // 按 API 返回的 chunk 快速刷入编辑器，保留 ghost mark
+    const insertGhostChunk = useCallback((text) => {
+        if (!text || !editor?.view) return;
+        const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const { state } = editor.view;
+        let tr = state.tr;
+        const ghostMark = state.schema.marks.ghostText.create();
+        const segments = normalizedText.split(/(\n+)/);
+
+        segments.forEach((segment) => {
+            if (!segment) return;
+
+            if (segment.includes('\n')) {
+                // 自动折叠连续空行：多段换行只保留一次段落分隔
+                if (lastGhostWasNewlineRef.current || ghostTextRef.current.length === 0) return;
+                tr = tr.split(tr.selection.from);
+                ghostTextRef.current += '\n';
+                lastGhostWasNewlineRef.current = true;
+                return;
+            }
+
+            if (segment) {
+                const from = tr.selection.from;
+                tr = tr.insertText(segment, from, from);
+                tr = tr.addMark(from, from + segment.length, ghostMark);
+                ghostTextRef.current += segment;
+                lastGhostWasNewlineRef.current = false;
+            }
+        });
+
+        editor.view.dispatch(tr);
+    }, [editor]);
 
     const startTyping = useCallback(() => {
         if (typingRef.current) return;
         typingRef.current = true;
 
-        const typeNext = () => {
+        const flush = () => {
             if (typeQueueRef.current.length === 0) {
                 typingRef.current = false;
                 return;
             }
-            const char = typeQueueRef.current.shift();
-            if (char === '\n') {
-                if (typeQueueRef.current[0] !== '\n') {
-                    // 换行：使用原生 split，不调用 scrollIntoView
-                    ghostTextRef.current += '\n';
-                    const { state } = editor.view;
-                    const tr = state.tr.split(state.selection.from);
-                    editor.view.dispatch(tr);
-                }
-            } else {
-                // 用原生 ProseMirror transaction 插入字符 + 标记 ghost
-                const { state } = editor.view;
-                const tr = state.tr.insertText(char);
-                const ghostMark = state.schema.marks.ghostText.create();
-                const to = tr.selection.from;
-                const from = to - char.length;
-                tr.addMark(from, to, ghostMark);
-                // 故意不调用 tr.scrollIntoView() — 防止滚动跳回
-                editor.view.dispatch(tr);
-                ghostTextRef.current += char;
-            }
-            requestAnimationFrame(() => setTimeout(typeNext, 20));
+            const chunks = typeQueueRef.current.splice(0, typeQueueRef.current.length);
+            chunks.forEach(insertGhostChunk);
+            requestAnimationFrame(flush);
         };
-        typeNext();
-    }, [editor]);
+        flush();
+    }, [insertGhostChunk]);
 
     // 将文本块加入打字队列
     const enqueueText = useCallback((text) => {
-        for (const char of text) {
-            typeQueueRef.current.push(char);
-        }
+        if (!text) return;
+        typeQueueRef.current.push(text);
         startTyping();
     }, [startTyping]);
 
@@ -866,6 +850,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         ghostStartRef.current = null;
         originalTextRef.current = null;
         originalRangeRef.current = null;
+        lastGhostWasNewlineRef.current = false;
         setPendingGhost(false);
         setVisible(false);
         editor?.chain().focus().run();
@@ -899,6 +884,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         originalTextRef.current = null;
         originalRangeRef.current = null;
         savedDocRef.current = null;
+        lastGhostWasNewlineRef.current = false;
         setPendingGhost(false);
         setVisible(false);
         editor?.chain().focus().run();
@@ -920,6 +906,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
             editor?.commands.removeAllGhost(ghostStartRef.current);
         }
         ghostTextRef.current = '';
+        lastGhostWasNewlineRef.current = false;
         setPendingGhost(false);
         // 触发新一轮生成（savedDocRef 保留不清空，供下次拒绝使用）
         setTimeout(() => generate(), 50);
@@ -996,12 +983,13 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         abortRef.current = controller;
         typeQueueRef.current = [];
         ghostTextRef.current = '';
+        lastGhostWasNewlineRef.current = false;
 
         // 保存生成前的文档快照（在任何修改之前）
         savedDocRef.current = editor.getJSON();
 
-        // 改写模式：备份原文
-        if (selectedText && actualMode !== 'continue') {
+        // 只要存在选区，就先删除选区，让生成内容覆盖原文
+        if (selectedText) {
             const { from, to } = editor.state.selection;
             originalTextRef.current = selectedText;
             originalRangeRef.current = { from, to };
@@ -1059,16 +1047,35 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 setVisible(false);
             }
         }
-    }, [onAiRequest, streaming, mode, instruction, getSelectedText, getContextText, editor, enqueueText, updatePosition, generateChat]);
+    }, [onAiRequest, streaming, mode, instruction, getSelectedText, getContextText, editor, enqueueText, generateChat]);
 
-    // 键盘快捷键：Ctrl+J 打开，Esc 关闭/拒绝，Tab 接受
+    useEffect(() => {
+        if (!visible || pendingGhost || dragOffset) return;
+        const rafId = requestAnimationFrame(updatePosition);
+        const handleResize = () => updatePosition();
+        window.addEventListener('resize', handleResize);
+        return () => {
+            cancelAnimationFrame(rafId);
+            window.removeEventListener('resize', handleResize);
+        };
+    }, [visible, pendingGhost, dragOffset, updatePosition]);
+
+    useEffect(() => {
+        if (!visible || !chapterId || !contextItems?.length) return;
+        if (defaultChapterSelectionRef.current === chapterId) return;
+        applyDefaultChapterReferences();
+    }, [visible, chapterId, contextItems, applyDefaultChapterReferences]);
+
+    // 键盘快捷键：Ctrl+A 全选并打开，Esc 关闭/拒绝，Tab 接受
     useEffect(() => {
         const handler = (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'j') {
+            const isOpenShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key?.toLowerCase() === 'a';
+
+            if (isOpenShortcut && !pendingGhost && isEditorShortcutContext(e.target)) {
                 e.preventDefault();
-                if (pendingGhost) return;
-                if (visible) close();
-                else open();
+                e.stopPropagation();
+                selectAllAndOpen();
+                return;
             }
             if (e.key === 'Escape' && (visible || pendingGhost)) {
                 e.preventDefault();
@@ -1082,9 +1089,14 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 acceptGhost();
             }
         };
+        const handleOpenRequest = () => open();
         document.addEventListener('keydown', handler);
-        return () => document.removeEventListener('keydown', handler);
-    }, [visible, streaming, pendingGhost, open, close, stop, rejectGhost, acceptGhost]);
+        document.addEventListener('inline-ai:open', handleOpenRequest);
+        return () => {
+            document.removeEventListener('keydown', handler);
+            document.removeEventListener('inline-ai:open', handleOpenRequest);
+        };
+    }, [visible, streaming, pendingGhost, open, close, stop, rejectGhost, acceptGhost, isEditorShortcutContext, selectAllAndOpen]);
 
     // 点击外部关闭（但待确认状态和RAG加载中不自动关闭）
     useEffect(() => {
@@ -1278,7 +1290,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                         <input
                             ref={inputRef}
                             className="inline-ai-input"
-                            placeholder={mode === 'continue' ? '补充指示（可选），如：写一段打斗场景' : '改写指示（可选），如：更有诗意'}
+                            placeholder={mode === 'continue' ? '补充指示（可选），如：补完这一段并自然收束' : '改写指示（可选），如：更有诗意'}
                             value={instruction}
                             onChange={e => setInstruction(e.target.value)}
                             onKeyDown={e => {
@@ -1313,7 +1325,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                     )}
                     {!streaming && !selectedText && (
                         <div className="inline-ai-hint">
-                            将在光标处续写 · Ctrl+J 打开/关闭
+                            将在光标处补完正文 · Ctrl+A 全选并打开
                         </div>
                     )}
                 </>
@@ -1712,6 +1724,33 @@ function EditorToolbar({ editor, margins, setMargins }) {
                 <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title="重做 (Ctrl+Y)"><Redo2 size={16} strokeWidth={2.5} /></button>
             </div>
 
+            <div className="toolbar-dropdown-wrap" onClick={e => e.stopPropagation()}>
+                <button
+                    className="toolbar-btn toolbar-dropdown-btn"
+                    onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget)); setShowFontSize(!showFontSize); }}
+                    title="字号"
+                >
+                    {fontSize}px <span className="dropdown-arrow">▾</span>
+                </button>
+                {showFontSize && (
+                    <div className="toolbar-dropdown-menu" style={dropPos}>
+                        {FONT_SIZES.map(size => (
+                            <button
+                                key={size}
+                                className={`toolbar-dropdown-item ${fontSize === size ? 'active' : ''}`}
+                                onMouseDown={e => e.preventDefault()}
+                                onClick={() => {
+                                    setFontSize(size);
+                                    setShowFontSize(false);
+                                }}
+                            >
+                                {size}px
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
             <div className="toolbar-divider" />
 
             {/* 字体族 */}
@@ -1926,7 +1965,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
 }
 
 // ==================== 状态栏 ====================
-function StatusBar({ editor, pageCount }) {
+function StatusBar({ editor }) {
     if (!editor) return null;
 
     const characterCount = editor.storage.characterCount;
@@ -1938,10 +1977,10 @@ function StatusBar({ editor, pageCount }) {
             <div className="status-bar-left">
                 <span>{words} 字</span>
                 <span>{chars} 字符</span>
-                <span style={{ color: 'var(--accent)', fontWeight: 600 }}>共 {pageCount} 页</span>
+                <span style={{ color: 'var(--accent)', fontWeight: 600 }}></span>
             </div>
             <div className="status-bar-right">
-                <span className="status-bar-shortcut">Ctrl+J AI助手</span>
+                <span className="status-bar-shortcut">Ctrl+A 全选 + AI助手</span>
                 <span>自动保存</span>
                 <span style={{ opacity: 0.5, fontSize: '11px' }}>© 2026 YuanShiJiLoong</span>
             </div>

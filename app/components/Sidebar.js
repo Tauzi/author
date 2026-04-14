@@ -250,14 +250,14 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             setRenameTitle(title);
         } else {
             const ch = await createChapter(title, activeWorkId);
-            const allChapters = await getChapters(activeWorkId);
-            setChapters(allChapters);
+            // 这里不要立刻回读持久化层；服务端异步同步时可能短暂读到旧列表，导致 UI 不刷新
+            addChapter(ch);
             setActiveChapterId(ch.id);
             setRenameId(ch.id);
             setRenameTitle(title);
         }
         showToast(t('sidebar.chapterCreated').replace('{title}', title), 'success');
-    }, [getNextChapterTitle, showToast, setChapters, setActiveChapterId, t, activeWorkId, activeVolumeId, chapters]);
+    }, [getNextChapterTitle, showToast, addChapter, setChapters, setActiveChapterId, t, activeWorkId, activeVolumeId, chapters]);
 
     // 删除章节/分卷
     const handleDeleteChapter = useCallback(async (id) => {

@@ -230,7 +230,7 @@
             "delete": "删除"
         },
         "modes": {
-            "continue": "续写",
+            "continue": "完成正文",
             "rewrite": "改写",
             "expand": "扩写",
             "condense": "精简",
@@ -454,7 +454,7 @@
         "step1Title": "创建你的故事",
         "step1Content": "点击左侧边栏的「＋ 新建」可以创建新章节。所有内容都会实时保存在你的浏览器本地。",
         "step2Title": "沉浸式创作",
-        "step2Content": "这是你的写作主场。支持 Markdown 语法与自动渲染，提供分页的类纸张体验。在光标处按下 Ctrl+J 即可唤起内联 AI 协助续写！",
+        "step2Content": "这是你的写作主场。支持 Markdown 语法与自动渲染，提供分页的类纸张体验。按下 Ctrl+A 即可全选当前文章，并在页面中央唤起内联 AI 协助完成正文！",
         "step3Title": "你的专属 AI 编辑",
         "step3Content": "点击这里打开 AI 侧栏，可以与 AI 讨论剧情，也可以让它帮你修改设定集、提供写作建议。",
         "stepCloudSyncTitle": "本地数据与备份",

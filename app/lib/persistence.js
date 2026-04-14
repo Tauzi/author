@@ -293,3 +293,4 @@ export async function initPersistence() {
     ensureUserId();
     await checkServerAvailable();
 }
+

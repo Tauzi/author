@@ -5,7 +5,7 @@ import { INPUT_TOKEN_BUDGET, buildContext, compileSystemPrompt, estimateTokens }
 import { addTokenRecord, getTokenStats, clearTokenStats } from '../lib/token-stats';
 import {
     saveSessionStore, createSession, deleteSession as deleteSessionFn,
-    renameSession, switchSession, getActiveSession, addMessage, editMessage as editMsgFn,
+    renameSession, switchSession, getActiveSession, editMessage as editMsgFn,
     deleteMessage as deleteMsgFn, createBranch, addVariant, switchVariant, replaceMessages
 } from '../lib/chat-sessions';
 import { getProjectSettings, getChatApiConfig, getActiveWorkId, getSettingsNodes, addSettingsNode, updateSettingsNode, deleteSettingsNode } from '../lib/settings';
@@ -327,6 +327,46 @@ function ProviderLogo({ provider, model, className = '' }) {
 }
 
 // ==================== AI 对话侧栏 ====================
+function ensureSessionStoreReady(store) {
+    const safeStore = store && Array.isArray(store.sessions)
+        ? store
+        : { activeSessionId: null, sessions: [] };
+
+    if (safeStore.activeSessionId && safeStore.sessions.some(session => session.id === safeStore.activeSessionId)) {
+        return safeStore;
+    }
+
+    if (safeStore.sessions.length > 0) {
+        return { ...safeStore, activeSessionId: safeStore.sessions[safeStore.sessions.length - 1].id };
+    }
+
+    return createSession(safeStore);
+}
+
+function addMessageToSessionStore(store, preferredSessionId, msg) {
+    const readyStore = ensureSessionStoreReady(store);
+    const targetSessionId = preferredSessionId && readyStore.sessions.some(session => session.id === preferredSessionId)
+        ? preferredSessionId
+        : readyStore.activeSessionId;
+
+    return {
+        ...readyStore,
+        sessions: readyStore.sessions.map(session => {
+            if (session.id !== targetSessionId) return session;
+            const messages = [...(session.messages || []), msg];
+            const isFirstUserMessage = (!session.messages || session.messages.length === 0) && msg.role === 'user';
+            return {
+                ...session,
+                messages,
+                title: isFirstUserMessage
+                    ? `${msg.content.slice(0, 30)}${msg.content.length > 30 ? '...' : ''}`
+                    : session.title,
+                updatedAt: Date.now(),
+            };
+        }),
+    };
+}
+
 export default function AiSidebar({ onInsertText }) {
     const {
         aiSidebarOpen: open, setAiSidebarOpen, setShowSettings,
@@ -590,7 +630,12 @@ export default function AiSidebar({ onInsertText }) {
 
     const onChatMessage = useCallback(async (text, selectedHistory) => {
         const userMsg = { id: `msg-${Date.now()}-u`, role: 'user', content: text, timestamp: Date.now() };
-        setSessionStore(prev => addMessage(prev, userMsg));
+        let targetSessionId = null;
+        setSessionStore(prev => {
+            const readyStore = ensureSessionStoreReady(prev);
+            targetSessionId = readyStore.activeSessionId;
+            return addMessageToSessionStore(readyStore, targetSessionId, userMsg);
+        });
         setChatStreaming(true);
         const aiMsgId = `msg-${Date.now()}-a`;
         const controller = new AbortController();
@@ -626,13 +671,13 @@ export default function AiSidebar({ onInsertText }) {
             contextSnapshot['对话历史'] = userPrompt;
 
             const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null };
-            setSessionStore(prev => addMessage(prev, aiPlaceholder));
+            setSessionStore(prev => addMessageToSessionStore(prev, targetSessionId, aiPlaceholder));
 
             const returnedBody = await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
                 (snapText, snapThinking, snapToolCalls) => {
                     setSessionStore(prev => ({
                         ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== prev.activeSessionId) return s;
+                            if (s.id !== targetSessionId) return s;
                             return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: snapText, thinking: snapThinking, toolCalls: snapToolCalls } : m) };
                         }),
                     }));
@@ -641,7 +686,7 @@ export default function AiSidebar({ onInsertText }) {
                     setSessionStore(prev => {
                         const finalStore = {
                             ...prev, sessions: prev.sessions.map(s => {
-                                if (s.id !== prev.activeSessionId) return s;
+                                if (s.id !== targetSessionId) return s;
                                 return {
                                     ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: finalText || '（AI 未返回内容）', thinking: finalThinking, toolCalls: finalToolCalls } : m),
                                     updatedAt: Date.now(),
@@ -659,7 +704,7 @@ export default function AiSidebar({ onInsertText }) {
                 setSessionStore(prev => {
                     const updated = {
                         ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== prev.activeSessionId) return s;
+                            if (s.id !== targetSessionId) return s;
                             return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, _rawRequest: returnedBody } : m) };
                         }),
                     };
@@ -673,7 +718,7 @@ export default function AiSidebar({ onInsertText }) {
                 setSessionStore(prev => {
                     const store = {
                         ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== prev.activeSessionId) return s;
+                            if (s.id !== targetSessionId) return s;
                             return {
                                 ...s, messages: s.messages.map(m => {
                                     if (m.id !== aiMsgId) return m;
@@ -687,7 +732,7 @@ export default function AiSidebar({ onInsertText }) {
                 });
             } else {
                 const errorMsg = { id: `msg-${Date.now()}-e`, role: 'assistant', content: `❌ ${err.message}`, timestamp: Date.now() };
-                setSessionStore(prev => addMessage(prev, errorMsg));
+                setSessionStore(prev => addMessageToSessionStore(prev, targetSessionId, errorMsg));
             }
         } finally {
             abortRef.current = null;

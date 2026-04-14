@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useAppStore } from './store/useAppStore';
 import { useI18n } from './lib/useI18n';
-import { Menu, Sparkles, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import Tooltip from './components/ui/Tooltip';
 import {
   getChapters,
@@ -19,10 +19,11 @@ import {
 import { getDeferredBootstrapDelay } from './lib/desktop-runtime';
 import { buildContext, compileSystemPrompt, compileUserPrompt, getContextItems, estimateTokens } from './lib/context-engine';
 import { addTokenRecord } from './lib/token-stats';
-import { getProjectSettings, WRITING_MODES, getWritingMode, addSettingsNode, updateSettingsNode, deleteSettingsNode, getSettingsNodes, getActiveWorkId } from './lib/settings';
+import { getProjectSettings, getWritingMode, getSettingsNodes, getActiveWorkId } from './lib/settings';
 import {
-  loadSessionStore, createSession, getActiveSession,
+  loadSessionStore, saveSessionStore, createSession, getActiveSession,
 } from './lib/chat-sessions';
+import { initPersistence } from './lib/persistence';
 // 动态导入编辑器和设定集面板及侧边栏（避免 SSR 问题）
 const Sidebar = dynamic(() => import('./components/Sidebar'), { ssr: false });
 const Editor = dynamic(() => import('./components/Editor'), {
@@ -41,6 +42,22 @@ const BookInfoPanel = dynamic(() => import('./components/BookInfoPanel'), { ssr:
 
 function isEditableChapter(chapter) {
   return !!(chapter && typeof chapter === 'object' && chapter.id && chapter.type !== 'volume');
+}
+
+function mergeSessionStores(loadedStore, liveStore) {
+  const loadedSessions = Array.isArray(loadedStore?.sessions) ? loadedStore.sessions : [];
+  const liveSessions = Array.isArray(liveStore?.sessions) ? liveStore.sessions : [];
+  const sessionsById = new Map();
+
+  loadedSessions.forEach((session) => sessionsById.set(session.id, session));
+  liveSessions.forEach((session) => sessionsById.set(session.id, session));
+
+  const sessions = Array.from(sessionsById.values());
+
+  return {
+    activeSessionId: liveStore?.activeSessionId || loadedStore?.activeSessionId || sessions[0]?.id || null,
+    sessions,
+  };
 }
 
 export default function Home() {
@@ -230,6 +247,22 @@ export default function Home() {
       }
       setWritingMode(getWritingMode());
 
+      let store = await loadSessionStore();
+      if (cancelled) return;
+
+      if (store.sessions.length === 0) {
+        store = createSession(store);
+      }
+      if (cancelled) return;
+
+      setSessionStore((prev) => {
+        if (!prev?.sessions?.length) return store;
+
+        const mergedStore = mergeSessionStores(store, prev);
+        saveSessionStore(mergedStore);
+        return mergedStore;
+      });
+
       setTimeout(async () => {
         if (cancelled) return;
         await initPersistence();
@@ -245,15 +278,6 @@ export default function Home() {
           } catch { /* ignore */ }
         }
 
-        let store = await loadSessionStore();
-        if (cancelled) return;
-
-        if (store.sessions.length === 0) {
-          store = createSession(store);
-        }
-        if (!cancelled) {
-          setSessionStore(store);
-        }
       }, getDeferredBootstrapDelay());
     };
 

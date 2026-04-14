@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom';
  * 
  * @param {Object} props
  * @param {string} props.content - 提示文本
- * @param {string} [props.shortcut] - 快捷键提示（如 "Ctrl+J"）
+ * @param {string} [props.shortcut] - 快捷键提示（如 "Ctrl+A"）
  * @param {'top'|'bottom'|'left'|'right'} [props.side='top'] - 弹出方向
  * @param {number} [props.delay=400] - 悬停延迟（ms）
  * @param {React.ReactNode} props.children - 触发元素

@@ -1255,14 +1255,7 @@ body.resizing .main-content {
 
 /* 纸页背景层（绝对定位在底层）*/
 .pages-bg-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  z-index: 0;
-  display: flex;
-  flex-direction: column;
+  display: none;
 }
 
 .page-card {
@@ -1278,11 +1271,22 @@ body.resizing .main-content {
   flex-shrink: 0;
 }
 
-/* 文本前景层（透明且连续流淌）*/
-.pages-fg-layer {
-  position: relative;
-  z-index: 1;
+.chapter-editor-shell {
   width: 100%;
+}
+
+/* 文本前景层（透明且连续流淌）*/
+.chapter-editor-surface {
+  width: 100%;
+  min-height: 560px;
+  background: var(--author-page-bg);
+  background-image: var(--author-page-bg-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: var(--author-page-bg-size);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 
@@ -1314,7 +1318,7 @@ body.resizing .main-content {
   caret-color: var(--accent);
   background: transparent;
   box-sizing: border-box;
-  min-height: 1056px;
+  min-height: 60vh;
   padding: var(--page-margin-y, 96px) var(--page-margin-x, 96px);
 }
 

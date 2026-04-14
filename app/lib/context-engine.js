@@ -547,12 +547,12 @@ export function compileUserPrompt(mode, text, instruction) {
         case 'continue':
             if (!text || !text.trim()) {
                 return instruction
-                    ? `请根据以下要求开始创作新内容：\n要求：${instruction}`
-                    : '请根据设定集信息，开始撰写新的章节内容。';
+                    ? `请根据以下要求开始完成本章节的正文内容：\n要求：${instruction}\n\n请直接输出正文，不要解释思路、不要写标题。`
+                    : '请根据设定集信息，开始撰写本章节的正文内容。请直接输出正文，不要解释思路、不要写标题。';
             }
             return instruction
-                ? `请续写以下内容，保持风格和情节的连贯性：\n要求：${instruction}\n\n「${text}」`
-                : `请续写以下内容，保持风格和情节的连贯性：\n\n「${text}」`;
+                ? `请基于以下已写大纲/细纲，继续完成正文。\n要求：${instruction}\n\n【已写内容】\n${text}`
+                : `请基于以下已写大纲/细纲，继续完成正文。\n\n【已写内容】\n${text}`;
         case 'rewrite':
             return instruction
                 ? `按照以下要求改写文本：\n要求：${instruction}\n\n原文：\n「${text}」`
@@ -709,12 +709,7 @@ function buildCurrentContext(chapter, index, totalChapters) {
 function getModeInstruction(mode) {
     switch (mode) {
         case 'continue':
-            return `根据前文的情节走向和当前章节的内容，自然地续写故事。
-要求：
-- 续写内容必须与前文情节逻辑严格连贯，不能出现矛盾
-- 如果涉及已有角色，必须符合其性格设定和说话风格
-- 场景描写要符合世界观设定
-- 情节推进要符合大纲规划的方向`;
+            return `请根据用户提供的故事大纲/细纲，撰写一章完整的正文，要求2100字。`;
 
         case 'rewrite':
             return `润色和改写指定文本，提升文学质量。
