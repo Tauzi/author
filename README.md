@@ -34,7 +34,7 @@
 
 直接下载安装，无需 Node.js：
 
-- [下载安装包 (Windows)](https://github.com/mleafish/author/releases/latest)
+- [下载安装包 (Windows)](https://github.com/Tauzi/author/releases/latest)
 
 ### 从源码运行
 
