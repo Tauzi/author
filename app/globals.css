@@ -1227,13 +1227,14 @@ body.resizing .main-content {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: 40px 16px 80px;
+  padding: 40px 16px 140px;
   background-color: var(--author-writing-bg) !important;
   background-image: var(--author-writing-bg-image);
   background-position: center;
   background-repeat: no-repeat;
   background-size: var(--author-writing-bg-size);
   transition: margin-right 0.3s ease, background-color 0.2s ease;
+  scroll-padding-bottom: 368px;
   /* 禁用滚动锚定，防止虚拟分页元素重排时导致原生滚动条跳动 */
   overflow-anchor: none;
 }
@@ -1319,7 +1320,10 @@ body.resizing .main-content {
   background: transparent;
   box-sizing: border-box;
   min-height: 60vh;
-  padding: var(--page-margin-y, 96px) var(--page-margin-x, 96px);
+  padding:
+    var(--page-margin-y, 96px)
+    var(--page-margin-x, 96px)
+    calc(var(--page-margin-y, 96px) + clamp(248px, 32vh, 308px));
 }
 
 .tiptap p {
